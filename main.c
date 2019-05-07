@@ -15,6 +15,8 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Global variables
 uint8_t sensorError = 0;
@@ -22,17 +24,19 @@ uint8_t pumpError = 0;
 uint8_t pumping = 0;
 volatile uint8_t readSensors = 0;
 int temperature = 0;
-char message[15] = "ZKOUSKA"; 
 
 // functions prototypes
 void uartTransmit(char msg[15]);
+char *numToStr(int number);
 
 // Timer ovf. 32.768ms
 ISR(TIMER0_OVF_vect){
+	char *msg;
+	
 	// (1 / F_CPU) * PRESCALLER * 256 * 1000 = time[ms]
 	static int pumpingTime = 0;
 	static uint8_t scanningTime = 0;
-	static uint8_t sendTemperature = 0;
+	static int sendAD = 0;
 		
 	if (pumping){
 		if (pumpingTime < (PUMPING_TIME*30)) pumpingTime++;
@@ -46,11 +50,13 @@ ISR(TIMER0_OVF_vect){
 		readSensors = 1;
 	}
 	
-	if (sendTemperature < 30) sendTemperature++;
+	if (sendAD < 300) sendAD++;
 	else{
-		sendTemperature = 0;
-
-		uartTransmit (message); // transmitting
+		sendAD = 0;
+		
+		msg = numToStr(temperature);
+		uartTransmit (msg); // transmitting
+		free(msg); 
 	}
 }
 
@@ -95,8 +101,8 @@ void initTimer(void){
 void initADC(void){
 	// ADC multiplexer selection register
 	ADMUX =
-	(0 << REFS1)|
-	(1 << REFS0)|	// AREF, internal VREF turned off
+	(1 << REFS1)|
+	(1 << REFS0)|	// Internal reference 1.1V
 	(0 << ADLAR)|	// Right shift result
 	(0 << MUX3) |
 	(0 << MUX2) |
@@ -150,7 +156,73 @@ void uartTransmit(char msg[15])
 	UDR0 = 10;  // 13
 	
 	PORTC ^= (1 << PC1);  // green LED on
+	_delay_ms(50);
+	PORTC ^= (1 << PC1);  // green LED on
 }
+	
+// Conversion from number to *char[]	
+char *numToStr(int number)
+{
+	char temp[10], *message;
+	long rank=1;
+	unsigned char i=0, counter=0;
+	
+	// For zero
+	if (number==0)
+	{
+		temp[0] = '0';
+		temp[1] = '\0';
+	}
+	else
+	{
+		// For negative numbers
+		if (number<0)
+		{
+			number*=-1;
+			temp[0]='-';
+			
+			while (number>=rank)
+			{
+				rank *= 10;
+				counter++;
+			}
+			rank/=10;
+			
+			for (i=1; i<(counter+1); i++)
+			{
+				temp[i] = number/rank + 0x30;
+				number -= (number/rank)*rank;
+				rank /= 10;
+			}
+			
+			temp[i] = '\0';
+		}
+		// For positive numbers
+		else
+		{
+			while (number>=rank)
+			{
+				rank *= 10;
+				counter++;
+			}
+			rank/=10;
+			
+			for (i=0; i<counter; i++)
+			{
+				temp[i] = number/rank + 0x30;
+				number -= (number/rank)*rank;
+				rank /= 10;
+			}
+			
+			temp[i] = ' ';
+			//temp[i] = '\n';
+		}
+	}
+	message = (char*)malloc(strlen(temp)+1);
+	strcpy(message,temp);
+	
+	return message;
+}	
 	
 // Main function
 int main(void)
