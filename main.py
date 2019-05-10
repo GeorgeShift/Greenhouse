@@ -1,3 +1,4 @@
+import machine
 from machine import UART
 from umqtt.simple import MQTTClient
 import network
@@ -46,14 +47,15 @@ while(True):
     if uart.any():
         data = uart.readline()
         data = data.decode('UTF-8')
-        data = data.strip()
+        # data = data.strip()
 
         try:
             ad = int(data)
-        except ValueError:
-            print("Chyba:", data)
+        except ValueError as e:
+            print("Chyba:", type(e).__name__)
+            pass
         else:
-            ad = ad - 20
+            ad = ad - 35
             teplota = 0.1963*ad - 135.76
             teplota = round(teplota, 1)
             payload = "field1="+str(teplota)
@@ -63,3 +65,6 @@ while(True):
 
             print("AD:", ad)
             print("Teplota:", teplota)
+
+print("Hard reset")
+machine.reset()

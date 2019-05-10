@@ -37,20 +37,23 @@ ISR(TIMER0_OVF_vect){
 	static int pumpingTime = 0;
 	static uint8_t scanningTime = 0;
 	static int sendAD = 0;
-		
+	
+	// pumping time counting	
 	if (pumping){
 		if (pumpingTime < (PUMPING_TIME*30)) pumpingTime++;
 		else pumpError = 1;
 	}
 	else pumpingTime = 0;
 	
+	// sensors reading interval
 	if (scanningTime < 2) scanningTime++;
 	else {
 		scanningTime = 0;
 		readSensors = 1;
 	}
 	
-	if (sendAD < 300) sendAD++;
+	// sending temperature once per minute
+	if (sendAD < 1831) sendAD++;
 	else{
 		sendAD = 0;
 		
@@ -133,7 +136,7 @@ int readADC(uint8_t channel){
 void initUart(void)
 {
 	UBRR0H=0; UBRR0L=51;  // baud rate 9600
-	UCSR0B = (1<<RXEN0) | (1<<TXEN0) | (1<<RXCIE0);	// RX enabled, TX enabled, interrupt enabled
+	UCSR0B = (0<<RXEN0) | (1<<TXEN0) | (1<<RXCIE0);	// RX enabled, TX enabled, interrupt enabled
 	UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);	// 8-bit, 1 stop bit, parity none
 }
 
@@ -214,8 +217,8 @@ char *numToStr(int number)
 				rank /= 10;
 			}
 			
-			temp[i] = ' ';
-			//temp[i] = '\n';
+			//temp[i] = ' ';
+			temp[i] = '\0';
 		}
 	}
 	message = (char*)malloc(strlen(temp)+1);
