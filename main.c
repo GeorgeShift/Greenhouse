@@ -309,7 +309,11 @@ int main(void)
 		else{
 			PORTC |= (1 << PC0);  // red LED on
 			PORTD &= ~(1 << PD5);  // pump relay disable
-			uartTransmit ("STOP");
+			if (!fullSent){
+				uartTransmit ("STOP");
+				fullSent = 1;
+				emptySent = 0;
+			}
 		}	
 
 		// if light button push down - toggle LED light
