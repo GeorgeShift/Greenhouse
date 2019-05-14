@@ -7,9 +7,9 @@
 
 #define F_CPU	8000000UL
 #define ADC2	2
-// maximum pumping time limit
+// maximum pumping time limit in seconds
 // if max. time reached, pumping stopped and error indicated
-#define PUMPING_TIME	180
+#define PUMPING_TIME	240
 
 // Includes
 #include <avr/io.h>
@@ -27,7 +27,7 @@ int temperature = 0;
 
 // functions prototypes
 void uartTransmit(char msg[15]);
-char *numToStr(int number);
+char *numToStr(int number, char id);
 
 // Timer ovf. 32.768ms
 ISR(TIMER0_OVF_vect){
@@ -54,10 +54,11 @@ ISR(TIMER0_OVF_vect){
 	
 	// sending temperature once per minute
 	if (sendAD < 1831) sendAD++;
+	//if (sendAD < 500) sendAD++;
 	else{
 		sendAD = 0;
 		
-		msg = numToStr(temperature);
+		msg = numToStr(temperature, 'T');
 		uartTransmit (msg); // transmitting
 		free(msg); 
 	}
@@ -104,8 +105,8 @@ void initTimer(void){
 void initADC(void){
 	// ADC multiplexer selection register
 	ADMUX =
-	(1 << REFS1)|
-	(1 << REFS0)|	// Internal reference 1.1V
+	(0 << REFS1)|
+	(1 << REFS0)|	// External reference 5V
 	(0 << ADLAR)|	// Right shift result
 	(0 << MUX3) |
 	(0 << MUX2) |
@@ -164,17 +165,19 @@ void uartTransmit(char msg[15])
 }
 	
 // Conversion from number to *char[]	
-char *numToStr(int number)
+char *numToStr(int number, char id)
 {
 	char temp[10], *message;
 	long rank=1;
 	unsigned char i=0, counter=0;
 	
+	temp[0] = id;
+	
 	// For zero
 	if (number==0)
 	{
-		temp[0] = '0';
-		temp[1] = '\0';
+		temp[1] = '0';
+		temp[2] = '\0';
 	}
 	else
 	{
@@ -182,7 +185,7 @@ char *numToStr(int number)
 		if (number<0)
 		{
 			number*=-1;
-			temp[0]='-';
+			temp[1]='-';
 			
 			while (number>=rank)
 			{
@@ -193,12 +196,12 @@ char *numToStr(int number)
 			
 			for (i=1; i<(counter+1); i++)
 			{
-				temp[i] = number/rank + 0x30;
+				temp[i+1] = number/rank + 0x30;
 				number -= (number/rank)*rank;
 				rank /= 10;
 			}
 			
-			temp[i] = '\0';
+			temp[i+1] = '\0';
 		}
 		// For positive numbers
 		else
@@ -212,13 +215,13 @@ char *numToStr(int number)
 			
 			for (i=0; i<counter; i++)
 			{
-				temp[i] = number/rank + 0x30;
+				temp[i+1] = number/rank + 0x30;
 				number -= (number/rank)*rank;
 				rank /= 10;
 			}
 			
 			//temp[i] = ' ';
-			temp[i] = '\0';
+			temp[i+1] = '\0';
 		}
 	}
 	message = (char*)malloc(strlen(temp)+1);
@@ -230,6 +233,7 @@ char *numToStr(int number)
 // Main function
 int main(void)
 {
+	uint8_t emptySent = 0, fullSent = 0;
 	uint8_t emptySensor = 0;
 	uint8_t fullSensor = 0;
 	unsigned char last_lightbtn_state=0, actual_lightbtn_state = 2;
@@ -276,12 +280,22 @@ int main(void)
 				// filling watter
 				pumping = 1;
 				PORTD |= (1 << PD5);  // pump relay enable
+				if (!emptySent){
+					uartTransmit ("START");
+					emptySent = 1;
+					fullSent = 0;
+				}
 			}
 			// tank is full
 			else if (!emptySensor && fullSensor){
 				// stop filling
 				pumping = 0;
 				PORTD &= ~(1 << PD5);  // pump relay disable
+				if (!fullSent){
+					uartTransmit ("STOP");
+					fullSent = 1;
+					emptySent = 0;
+				}				
 			}
 			// mismatch error
 			else if (emptySensor && fullSensor){
@@ -295,6 +309,7 @@ int main(void)
 		else{
 			PORTC |= (1 << PC0);  // red LED on
 			PORTD &= ~(1 << PD5);  // pump relay disable
+			uartTransmit ("STOP");
 		}	
 
 		// if light button push down - toggle LED light
@@ -302,7 +317,7 @@ int main(void)
 		{
 			PORTD ^= (1 << PD6);	// toggle LED light
 		}
-		
+				
     }
 }
 
